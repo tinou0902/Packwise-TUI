@@ -1,0 +1,20 @@
+// NuKeeper — petite TUI de gestion des dépendances NuGet (zéro paquet NuGet).
+// Usage: NuKeeper [dossier]   — par défaut, le dossier courant.
+
+string root = args.Length > 0 ? Path.GetFullPath(args[0]) : Directory.GetCurrentDirectory();
+if (!Directory.Exists(root))
+{
+    Console.Error.WriteLine($"Dossier introuvable : {root}");
+    return 1;
+}
+
+try
+{
+    await new NuKeeper.NuKeeperApp(root).RunAsync();
+}
+catch (System.Exception e)
+{
+    Console.Error.WriteLine(e.Message);
+    return 1;
+}
+return 0;
