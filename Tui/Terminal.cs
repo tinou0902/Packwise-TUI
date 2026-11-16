@@ -120,20 +120,21 @@ public sealed class Terminal : IDisposable
             {
                 if (start >= text.Length) break;
                 int end = Math.Min(start + len, text.Length);
-                AppendStyled(sb, text.AsSpan(start, end - start), cell.Color, cell.Bold);
+                AppendStyled(sb, text.AsSpan(start, end - start), cell.Color, cell.Bold, row.Highlight);
             }
             if (text.Length < Width)
-                sb.Append(new string(' ', Width - text.Length));
+                AppendStyled(sb, new string(' ', Width - text.Length), ScreenColor.Default, false, row.Highlight);
         }
         sb.Append("\x1b[J");
         Console.Write(sb);
     }
 
-    public static void AppendStyled(StringBuilder sb, ReadOnlySpan<char> text, ScreenColor color, bool bold)
+    public static void AppendStyled(StringBuilder sb, ReadOnlySpan<char> text,     ScreenColor color, bool bold, bool highlight = false)
     {
         sb.Append('\x1b')
           .Append(bold ? "[1;" : "[0;")
-          .Append(code(color))
+              .Append(highlight ? "48;5;238;" : "")
+          .Append(code(highlight && color == ScreenColor.Dim ? ScreenColor.Default : color))
           .Append('m');
         sb.Append(text);
         sb.Append("\x1b[0m");
@@ -164,5 +165,6 @@ public readonly struct ScreenCell(string text, ScreenColor color = ScreenColor.D
 
 public readonly record struct ScreenRow(IReadOnlyList<ScreenCell> Cells)
 {
+    public bool Highlight { get; init; }
     public ScreenRow(params ScreenCell[] cells) : this((IReadOnlyList<ScreenCell>)cells) { }
 }

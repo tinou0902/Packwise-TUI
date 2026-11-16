@@ -30,11 +30,12 @@ Un projet jamais restauré est restauré automatiquement.
 
 | Touche | Action |
 |---|---|
-| `↑` `↓` `PgUp` `PgDn` | naviguer |
+| `↑` `↓` `PgUp` `PgDn` `Home` `End` | naviguer |
+| `?` / `F1` | aide |
 | `Entrée` / `d` | détail du paquet |
-| `u` | mettre à jour à la dernière version stable |
-| `x` | supprimer (paquets directs uniquement) |
-| `t` | filtre : tous → obsolètes → vulnérables |
+| `u` | mettre à jour à la dernière version stable (confirmation) |
+| `x` | supprimer, paquets directs uniquement (confirmation) |
+| `1` `2` `3` / `t` | filtre : tous / obsolètes / vulnérables |
 | `F5` | recharger |
 | `q` / `Échap` | retour au choix du projet |
 

@@ -31,6 +31,18 @@ public sealed partial class NuKeeperApp
     Task? _loading;
     string _loadMsg = "";
 
+    bool _help;
+    string _confirmText = "";
+    string _confirmLoadMsg = "";
+    Func<Task>? _confirmAction;
+
+    void Ask(string question, string loadMsg, Func<Task> action)
+    {
+        _confirmText = question;
+        _confirmLoadMsg = loadMsg;
+        _confirmAction = action;
+    }
+
     public NuKeeperApp(string root) => _root = root;
 
     public async Task RunAsync()
@@ -57,6 +69,35 @@ public sealed partial class NuKeeperApp
             }
             var key = term.ReadKey();
             if (key.KeyChar == '\u0003') return;
+            _status = "";
+            if (_help)
+            {
+                _help = false;
+                continue;
+            }
+            if (_confirmAction is not null)
+            {
+                var action = _confirmAction;
+                _confirmAction = null;
+                if (key.Key == ConsoleKey.Enter || char.ToLowerInvariant(key.KeyChar) is 'o' or 'y')
+                {
+                    _status = "";
+                    _mode = AppMode.Loading;
+                    _loadMsg = _confirmLoadMsg;
+                    _loading = action();
+                }
+                else
+                {
+                    _status = "annulé";
+                    _statusOk = true;
+                }
+                continue;
+            }
+            if (key.KeyChar is '?' || key.Key == ConsoleKey.F1)
+            {
+                _help = true;
+                continue;
+            }
             if (key.Key == ConsoleKey.Escape)
             {
                 // Échap = retour arrière : détail → liste → choix → sortie.
@@ -155,6 +196,12 @@ public sealed partial class NuKeeperApp
             case ConsoleKey.PageDown:
                 if (n > 0) _sel = Math.Min(n - 1, _sel + 10);
                 break;
+            case ConsoleKey.Home:
+                _sel = 0;
+                break;
+            case ConsoleKey.End:
+                _sel = Math.Max(0, n - 1);
+                break;
             case ConsoleKey.F5:
                 if (_data?.ProjectFile is not null)
                 {
@@ -174,6 +221,9 @@ public sealed partial class NuKeeperApp
         var pkg = vis[_sel];
         switch (key.KeyChar)
         {
+            case '1': _filter = PkgFilter.All; _sel = 0; break;
+            case '2': _filter = PkgFilter.Outdated; _sel = 0; break;
+            case '3': _filter = PkgFilter.Vulnerable; _sel = 0; break;
             case 't':
                 _filter = _filter switch
                 {
@@ -184,16 +234,13 @@ public sealed partial class NuKeeperApp
                 _sel = 0;
                 break;
             case 'u':
-                _mode = AppMode.Loading;
-                _loadMsg = $"mise à jour de {pkg.Id}…";
-                _loading = UpdateToLatest(pkg);
+                string target = pkg.Latest.Length > 0 ? pkg.Latest : "la dernière version stable";
+                Ask($"Mettre à jour {pkg.Id} {pkg.Resolved} → {target} ?", $"mise à jour de {pkg.Id}…", () => UpdateToLatest(pkg));
                 break;
             case 'x':
                 if (pkg.IsDirect)
                 {
-                    _mode = AppMode.Loading;
-                    _loadMsg = $"suppression de {pkg.Id}…";
-                    _loading = RemovePackage(pkg);
+                    Ask($"Supprimer {pkg.Id} du projet ?", $"suppression de {pkg.Id}…", () => RemovePackage(pkg));
                 }
                 else
                 {
@@ -221,6 +268,18 @@ public sealed partial class NuKeeperApp
             case ConsoleKey.DownArrow:
                 if (_verSel < n - 1) _verSel++;
                 break;
+            case ConsoleKey.PageUp:
+                _verSel = Math.Max(0, _verSel - 10);
+                break;
+            case ConsoleKey.PageDown:
+                _verSel = Math.Max(0, Math.Min(n - 1, _verSel + 10));
+                break;
+            case ConsoleKey.Home:
+                _verSel = 0;
+                break;
+            case ConsoleKey.End:
+                _verSel = Math.Max(0, n - 1);
+                break;
         }
         if (key.KeyChar == 'q')
         {
@@ -230,9 +289,15 @@ public sealed partial class NuKeeperApp
         if (n > 0 && (key.Key == ConsoleKey.Enter || key.KeyChar == 'a'))
         {
             string ver = _versions[_verSel];
-            _mode = AppMode.Loading;
-            _loadMsg = $"mise à jour {_detail!.Id} → {ver}…";
-            _loading = UpdateToVersion(_detail, ver);
+            var pkg = _detail!;
+            if (ver.Equals(pkg.Resolved, StringComparison.OrdinalIgnoreCase))
+            {
+                _status = $"{pkg.Id} est déjà en {ver}";
+                _statusOk = true;
+                return false;
+            }
+            string warn = _verVulns.ContainsKey(ver) ? "  ⚠ VERSION VULNÉRABLE" : "";
+            Ask($"Passer {pkg.Id} {pkg.Resolved} → {ver} ?{warn}", $"mise à jour {pkg.Id} → {ver}…", () => UpdateToVersion(pkg, ver));
             return false;
         }
         return false;

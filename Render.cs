@@ -8,36 +8,88 @@ public sealed partial class NuKeeperApp
     void Render(Terminal term)
     {
         var rows = new List<ScreenRow>();
-        switch (_mode)
+        if (_help)
+            RenderHelp(rows);
+        else
         {
-            case AppMode.Select: RenderSelect(rows, term); break;
-            case AppMode.Packages: RenderPackages(rows, term); break;
-            case AppMode.Detail: RenderDetail(rows, term); break;
-            default: AddRow(rows, T(_loading is null ? "…" : "… " + _loadMsg, ScreenColor.Yellow, bold: true)); break;
+            rows.Add(new ScreenRow(T(" NuKeeper ", ScreenColor.Cyan, bold: true), T(Breadcrumb(), ScreenColor.Default)) { Highlight = true });
+            switch (_mode)
+            {
+                case AppMode.Select: RenderSelect(rows, term); break;
+                case AppMode.Packages: RenderPackages(rows, term); break;
+                case AppMode.Detail: RenderDetail(rows, term); break;
+                default: AddRow(rows, T(_loading is null ? "…" : "⏳ " + _loadMsg, ScreenColor.Yellow, bold: true)); break;
+            }
         }
         int bottom = Math.Max(0, term.Height - 2);
         while (rows.Count < bottom)
             AddRow(rows, T(""));
         if (rows.Count > bottom) rows.RemoveRange(bottom, rows.Count - bottom);
-        AddRow(rows, T(_status.Length == 0 ? "" : _status, _statusOk ? ScreenColor.Green : ScreenColor.Red));
-        AddRow(rows, T(FooterKeys(), ScreenColor.Dim));
+        if (_confirmAction is not null)
+        {
+            AddRow(rows, T(_confirmText, ScreenColor.Yellow, bold: true));
+            AddRow(rows, Key("o/Entrée"), T("confirmer   ", ScreenColor.Dim), Key("autre touche"), T("annuler", ScreenColor.Dim));
+        }
+        else
+        {
+            AddRow(rows, T(_status.Length > 0 ? _status : SelectedInfo(), _status.Length == 0 && SelectedInfo().Length > 0 ? ScreenColor.Red : _statusOk ? ScreenColor.Green : ScreenColor.Red));
+            AddRow(rows, FooterKeys().SelectMany(k => new[] { Key(k.Key), T(k.Label + "   ", ScreenColor.Dim) }).ToArray());
+        }
         term.Render(rows);
     }
 
-    string FooterKeys() => _mode switch
+    string Breadcrumb() => _mode switch
     {
-        AppMode.Select => "↑↓ déplacer  Entrée: ouvrir  F5: re-scan  q: quitter",
-        AppMode.Packages => "u: maj  d: détail  x: suppr.  t: filtre  F5: recharger  q/Échap: retour",
-        AppMode.Detail => "↑↓ choisir  Entrée: mettre à jour  Échap/q: retour",
-        _ => "…",
+        AppMode.Select => "› Choix du projet",
+        AppMode.Packages => "› " + Path.GetFileName(_data?.ProjectFile ?? ""),
+        AppMode.Detail => "› " + Path.GetFileName(_data?.ProjectFile ?? "") + " › " + _detail?.Id,
+        _ => _data is null ? "" : "› " + Path.GetFileName(_data.ProjectFile),
     };
 
+    string SelectedInfo()
+    {
+        if (_mode != AppMode.Packages || _data is null) return "";
+        var vis = Visible();
+        if (vis.Count == 0) return "";
+        var p = vis[Math.Clamp(_sel, 0, vis.Count - 1)];
+        return p.Vulns.Count == 0 ? "" : $"⚠ {p.Id} : " + string.Join("  |  ", p.Vulns.Select(v => $"{v.Severity} {v.AdvisoryUrl}"));
+    }
+
+    static ScreenCell Key(string k) => T(" " + k + " ", ScreenColor.Cyan, bold: true);
+
+    (string Key, string Label)[] FooterKeys() => _mode switch
+    {
+        AppMode.Select => [("↑↓", "choisir"), ("Entrée", "ouvrir"), ("F5", "re-scan"), ("?", "aide"), ("q", "quitter")],
+        AppMode.Packages => [("↑↓", "choisir"), ("Entrée", "détail"), ("u", "mettre à jour"), ("x", "supprimer"), ("1/2/3", "filtre"), ("?", "aide"), ("q", "retour")],
+        AppMode.Detail => [("↑↓", "choisir"), ("Entrée", "installer cette version"), ("?", "aide"), ("Échap", "retour")],
+        _ => [("Ctrl+C", "quitter")],
+    };
+
+    void RenderHelp(List<ScreenRow> rows)
+    {
+        AddRow(rows, T(" Aide — touches", ScreenColor.Cyan, bold: true));
+        AddRow(rows, T(""));
+        string[] lines =
+        [
+            "Partout        ↑↓ PgUp PgDn Home End : naviguer   ?/F1 : cette aide   Échap : retour   Ctrl+C : quitter",
+            "Projets        Entrée : analyser le projet   F5 : re-scanner les dossiers   q : quitter",
+            "Paquets        Entrée/d : détail   u : mettre à jour (dernière stable)   x : supprimer (directs seulement)",
+            "               1 : tous   2 : obsolètes   3 : vulnérables   t : filtre suivant   F5 : recharger   q : retour",
+            "Détail         ↑↓ : choisir une version   Entrée/a : installer cette version (confirmation demandée)",
+            "",
+            "Colonne TYPE   direct = référencé dans le csproj   transitif = tiré par une autre dépendance",
+            "État           ⚠ N vuln. = vulnérable (détails en bas)   obsolete = plus récente dispo   à jour",
+            "Versions       ⚠ vulnérable = advisory connu : à éviter   * = version installée",
+            "",
+            "Appuyez sur une touche pour fermer.",
+        ];
+        foreach (var l in lines) AddRow(rows, T(" " + l));
+    }
     // ---------- Choix du projet ----------
 
     void RenderSelect(List<ScreenRow> rows, Terminal term)
     {
-        AddRow(rows, T("NuKeeper — dépendances NuGet d'un projet .NET", ScreenColor.Cyan, bold: true));
-        AddRow(rows, T(_root, ScreenColor.Dim));
+        AddRow(rows, T(" Choisissez le projet à gérer — dossier : " + _root, ScreenColor.Dim));
         if (_projects.Count == 0)
         {
             AddRow(rows, T(""));
@@ -51,9 +103,9 @@ public sealed partial class NuKeeperApp
             string rel;
             try { rel = Path.GetRelativePath(_root, p); }
             catch { rel = p; }
-            AddRow(rows,
-                T(sel ? "▶ " : "  ", sel ? ScreenColor.Yellow : ScreenColor.Default, bold: sel),
-                T(p == rel ? p : rel + "   (" + p + ")", ScreenColor.Default, bold: sel));
+            rows.Add(new ScreenRow(
+                T(sel ? " ▶ " : "   ", sel ? ScreenColor.Yellow : ScreenColor.Default, bold: sel),
+                T(p == rel ? p : rel + "   (" + p + ")", ScreenColor.Default, bold: sel)) { Highlight = sel });
         }
     }
 
@@ -87,7 +139,7 @@ public sealed partial class NuKeeperApp
             T("TYPE", ScreenColor.Dim, bold: true).Pad(11),
             T("  ÉTAT", ScreenColor.Dim, bold: true));
         _sel = Math.Clamp(_sel, 0, Math.Max(0, vis.Count - 1));
-        var (first, count) = Window(_sel, vis.Count, term.Height - 5);
+        var (first, count) = Window(_sel, vis.Count, term.Height - 6);
         foreach ((Package p, int i) in vis.Select((p, i) => (p, i)).Skip(first).Take(count))
         {
             bool sel = i == _sel;
@@ -100,13 +152,13 @@ public sealed partial class NuKeeperApp
                 p.IsVulnerable ? (ScreenColor.Red, $"⚠ {p.Vulns.Count} vuln.")
                 : p.IsOutdated ? (ScreenColor.Yellow, "obsolete")
                 : (ScreenColor.Dim, "à jour");
-            AddRow(rows,
+            rows.Add(new ScreenRow(
                 T(Fit((sel ? "▶ " : "  ") + p.Id, idw), sel ? ScreenColor.Yellow : cId, bold: sel || p.IsDirect),
                 T(p.Requested, ScreenColor.Dim).Pad(C_REQ),
                 T(p.Resolved, ScreenColor.Default).Pad(C_RES),
                 T(arrow + latest, cLatest).Pad(C_LATEST),
                 T(p.IsDirect ? "direct" : "transitif", p.IsDirect ? ScreenColor.Green : ScreenColor.Yellow).Pad(11),
-                T(state.Item2, state.Item1, p.IsVulnerable));
+                T(state.Item2, state.Item1, p.IsVulnerable)) { Highlight = sel });
         }
         if (vis.Count == 0)
             AddRow(rows, T("(aucun paquet ne correspond au filtre)", ScreenColor.Dim));
@@ -157,9 +209,9 @@ public sealed partial class NuKeeperApp
             string mark = "";
             if (_verVulns.TryGetValue(v, out var vr))
                 mark = $"  ⚠ vulnérable ({string.Join(", ", vr.Select(x => NuGetFeed.SeverityName(x.Severity)).Distinct())})";
-            AddRow(rows,
+            rows.Add(new ScreenRow(
                 T((sel ? "▶ " : "  ") + (cur ? "*" : " ") + v, c, bold: sel || cur),
-                T(mark, ScreenColor.Red, bold: sel));
+                T(mark, ScreenColor.Red, bold: sel)) { Highlight = sel });
         }
     }
 
