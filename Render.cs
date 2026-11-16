@@ -36,6 +36,11 @@ public sealed partial class NuKeeperApp
             AddRow(rows, T(" ● " + _loadMsg, ScreenColor.Yellow, bold: true));
             AddRow(rows, Key("Ctrl+C") , T("quitter", ScreenColor.Dim));
         }
+        else if (_searching)
+        {
+            AddRow(rows, T(" / ", ScreenColor.Cyan, bold: true), T(_search + "▌", ScreenColor.Yellow, bold: true));
+            AddRow(rows, Key("Entrée"), T("valider   ", ScreenColor.Dim), Key("Échap"), T("effacer   ", ScreenColor.Dim), Key("⌫"), T("corriger", ScreenColor.Dim));
+        }
         else
         {
             AddRow(rows, T(_status.Length > 0 ? _status : SelectedInfo(), _status.Length == 0 && SelectedInfo().Length > 0 ? ScreenColor.Red : _statusOk ? ScreenColor.Green : ScreenColor.Red));
@@ -65,8 +70,8 @@ public sealed partial class NuKeeperApp
 
     (string Key, string Label)[] FooterKeys() => _mode switch
     {
-        AppMode.Select => [("↑↓", "choisir"), ("Entrée", "ouvrir"), ("F5", "re-scan"), ("?", "aide"), ("q", "quitter")],
-        AppMode.Packages => [("↑↓", "choisir"), ("Entrée", "détail"), ("u", "mettre à jour"), ("x", "supprimer"), ("1/2/3", "filtre"), ("?", "aide"), ("q", "retour")],
+        AppMode.Select => [("↑↓", "choisir"), ("Entrée", "ouvrir"), ("/", "rechercher"), ("F5", "re-scan"), ("?", "aide"), ("q", "quitter")],
+        AppMode.Packages => [("↑↓", "choisir"), ("Entrée", "détail"), ("u", "maj"), ("x", "suppr."), ("/", "chercher"), ("1/2/3", "filtre"), ("?", "aide"), ("q", "retour")],
         AppMode.Detail => [("↑↓", "choisir"), ("Entrée", "installer cette version"), ("?", "aide"), ("Échap", "retour")],
         _ => [("Ctrl+C", "quitter")],
     };
@@ -77,6 +82,7 @@ public sealed partial class NuKeeperApp
         AddRow(rows, T(""));
         string[] lines =
         [
+            "Recherche      / : chercher (projets, paquets)   Entrée : valider   Échap : effacer",
             "Partout        ↑↓ PgUp PgDn Home End : naviguer   ?/F1 : cette aide   Échap : retour   Ctrl+C : quitter",
             "Projets        Entrée : analyser le projet   F5 : re-scanner les dossiers   q : quitter",
             "Paquets        Entrée/d : détail   u : mettre à jour (dernière stable)   x : supprimer (directs seulement)",
@@ -95,22 +101,27 @@ public sealed partial class NuKeeperApp
 
     void RenderSelect(List<ScreenRow> rows, Terminal term)
     {
-        AddRow(rows, T($" {_projects.Count} projet(s) sous ", ScreenColor.Dim), T(Ellipsis(_root, Math.Max(10, term.Width - 25)), ScreenColor.Default));
-        if (_projects.Count == 0)
+        var list = ProjList();
+        AddRow(rows,
+            T($" {list.Count}/{_projects.Count} projet(s) sous ", ScreenColor.Dim),
+            T(Ellipsis(_root, Math.Max(10, term.Width - 45)), ScreenColor.Default),
+            T(_search.Length > 0 ? $"   recherche : {_search}" : "", ScreenColor.Yellow, bold: true));
+        if (list.Count == 0)
         {
             AddRow(rows, T(""));
-            AddRow(rows, T(" Aucun fichier .csproj trouvé. F5 pour re-scanner.", ScreenColor.Yellow));
+            AddRow(rows, T(_projects.Count == 0 ? " Aucun fichier .csproj trouvé. F5 pour re-scanner." : " Aucun projet ne correspond à la recherche (Échap pour effacer).", ScreenColor.Yellow));
             return;
         }
-        var names = _projects.Select(p => Path.GetFileNameWithoutExtension(p)).ToList();
+        var names = list.Select(p => Path.GetFileNameWithoutExtension(p)).ToList();
         int nw = Math.Clamp(names.Max(n => n.Length) + 4, 12, Math.Max(12, term.Width / 2));
         AddRow(rows, T("   PROJET", ScreenColor.Dim, bold: true).Pad(nw + 3), T("DOSSIER", ScreenColor.Dim, bold: true));
         int cap = Math.Max(1, term.Height - 6);
-        var (first, count) = Window(_projSel, _projects.Count, cap);
+        _projSel = Math.Clamp(_projSel, 0, list.Count - 1);
+        var (first, count) = Window(_projSel, list.Count, cap);
         for (int i = first; i < first + count; i++)
         {
             bool sel = i == _projSel;
-            string dir = Path.GetDirectoryName(_projects[i]) ?? "";
+            string dir = Path.GetDirectoryName(list[i]) ?? "";
             string rel = dir;
             try { rel = Path.GetRelativePath(_root, dir); } catch { }
             if (rel == ".") rel = "(dossier racine)";
@@ -143,7 +154,8 @@ public sealed partial class NuKeeperApp
         AddRow(rows,
             T(Path.GetFileName(_data.ProjectFile), bold: true),
             T($"   {all.Count} paquets — {outdated} obsolètes, {vuln} vulnérables", ScreenColor.Dim),
-            T($"   filtre: {filter} ({vis.Count})", fc));
+            T($"   filtre: {filter} ({vis.Count})", fc),
+            T(_search.Length > 0 ? $"   recherche : {_search}" : "", ScreenColor.Yellow, bold: true));
         int idw = Math.Clamp(vis.Select(p => p.Id.Length).DefaultIfEmpty(0).Max() + 3, 12, Math.Max(12, term.Width - 60));
         AddRow(rows,
             T(" PAQUET", ScreenColor.Dim, bold: true).Pad(idw),
@@ -175,7 +187,7 @@ public sealed partial class NuKeeperApp
                 T(state.Item2, state.Item1, p.IsVulnerable)) { Highlight = sel });
         }
         if (vis.Count == 0)
-            AddRow(rows, T("(aucun paquet ne correspond au filtre)", ScreenColor.Dim));
+            AddRow(rows, T("(aucun paquet ne correspond au filtre / à la recherche)", ScreenColor.Dim));
     }
 
     static string Fit(string s, int width) =>

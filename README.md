@@ -31,6 +31,7 @@ Un projet jamais restauré est restauré automatiquement.
 | Touche | Action |
 |---|---|
 | `↑` `↓` `PgUp` `PgDn` `Home` `End` | naviguer |
+| `/` | rechercher (projets ou paquets) ; `Entrée` valide, `Échap` efface |
 | `?` / `F1` | aide |
 | `Entrée` / `d` | détail du paquet |
 | `u` | mettre à jour à la dernière version stable (confirmation) |

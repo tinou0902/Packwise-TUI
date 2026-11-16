@@ -32,6 +32,23 @@ public sealed partial class NuKeeperApp
     string _loadMsg = "";
 
     bool _help;
+    bool _searching;
+    string _search = "";
+
+    List<string> ProjList() => _search.Length == 0
+        ? _projects
+        : _projects.Where(p => Path.GetRelativePath(_root, p).Contains(_search, StringComparison.OrdinalIgnoreCase)).ToList();
+
+    // Saisie de la recherche ; Entrée valide, Échap efface.
+    void HandleSearchKey(ConsoleKeyInfo key)
+    {
+        if (key.Key == ConsoleKey.Enter) _searching = false;
+        else if (key.Key == ConsoleKey.Escape) { _searching = false; _search = ""; }
+        else if (key.Key == ConsoleKey.Backspace) { if (_search.Length > 0) _search = _search[..^1]; }
+        else if (!char.IsControl(key.KeyChar)) _search += key.KeyChar;
+        _sel = 0;
+        _projSel = 0;
+    }
     AppMode _view = AppMode.Select;
     string _confirmText = "";
     string _confirmLoadMsg = "";
@@ -94,9 +111,19 @@ public sealed partial class NuKeeperApp
                 }
                 continue;
             }
+            if (_searching)
+            {
+                HandleSearchKey(key);
+                continue;
+            }
             if (key.KeyChar is '?' || key.Key == ConsoleKey.F1)
             {
                 _help = true;
+                continue;
+            }
+            if (key.Key == ConsoleKey.Escape && _search.Length > 0 && _mode is AppMode.Select or AppMode.Packages)
+            {
+                _search = "";
                 continue;
             }
             if (key.Key == ConsoleKey.Escape)
@@ -105,7 +132,7 @@ public sealed partial class NuKeeperApp
                 switch (_mode)
                 {
                     case AppMode.Detail: _mode = AppMode.Packages; break;
-                    case AppMode.Packages: _mode = AppMode.Select; break;
+                    case AppMode.Packages: _mode = AppMode.Select; _search = ""; break;
                     default: return;
                 }
                 continue;
@@ -123,7 +150,14 @@ public sealed partial class NuKeeperApp
 
     bool HandleSelect(ConsoleKeyInfo key)
     {
-        int n = _projects.Count;
+        var list = ProjList();
+        int n = list.Count;
+        _projSel = Math.Clamp(_projSel, 0, Math.Max(0, n - 1));
+        if (key.KeyChar == '/' && _projects.Count > 0)
+        {
+            _searching = true;
+            return false;
+        }
         switch (key.Key)
         {
             case ConsoleKey.UpArrow:
@@ -138,8 +172,9 @@ public sealed partial class NuKeeperApp
                 break;
             case ConsoleKey.Enter when n > 0:
                 _mode = AppMode.Loading;
-                _loadMsg = $"analyse de {Path.GetFileName(_projects[_projSel])}…";
-                _loading = LoadProject(_projects[_projSel]);
+                _search = "";
+                _loadMsg = $"analyse de {Path.GetFileName(list[_projSel])}…";
+                _loading = LoadProject(list[_projSel]);
                 break;
         }
         return key.KeyChar == 'q';
@@ -147,7 +182,8 @@ public sealed partial class NuKeeperApp
 
     // ---------- Tableau des paquets ----------
 
-    List<Package> Visible() => Visible(_filter);
+    List<Package> Visible() => Visible(_filter)
+        .Where(p => _search.Length == 0 || p.Id.Contains(_search, StringComparison.OrdinalIgnoreCase)).ToList();
 
     List<Package> Visible(PkgFilter filter)
     {
@@ -215,6 +251,12 @@ public sealed partial class NuKeeperApp
         if (key.KeyChar == 'q')
         {
             _mode = AppMode.Select;
+            _search = "";
+            return false;
+        }
+        if (key.KeyChar == '/')
+        {
+            _searching = true;
             return false;
         }
         if (n == 0) return false;
