@@ -21,6 +21,7 @@ public static class DotNetCli
         var psi = new ProcessStartInfo("dotnet")
         {
             RedirectStandardOutput = true,
+            RedirectStandardInput = true,
             RedirectStandardError = true,
             UseShellExecute = false,
             CreateNoWindow = true,
@@ -32,6 +33,7 @@ public static class DotNetCli
         psi.Environment["DOTNET_NOLOGO"] = "1";
 
         using var p = Process.Start(psi)!;
+        p.StandardInput.Close(); // le fils ne doit pas toucher à l'entrée console
         var stdout = p.StandardOutput.ReadToEndAsync();
         var stderr = p.StandardError.ReadToEndAsync();
         await p.WaitForExitAsync();

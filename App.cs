@@ -32,6 +32,7 @@ public sealed partial class NuKeeperApp
     string _loadMsg = "";
 
     bool _help;
+    AppMode _view = AppMode.Select;
     string _confirmText = "";
     string _confirmLoadMsg = "";
     Func<Task>? _confirmAction;

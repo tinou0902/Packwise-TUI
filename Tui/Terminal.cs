@@ -97,6 +97,9 @@ public sealed class Terminal : IDisposable
     public void Render(IReadOnlyList<ScreenRow> rows)
     {
         (Width, Height) = SafeSize();
+        // Les processus fils (dotnet/MSBuild) peuvent réinitialiser le mode console : on le restaure.
+        if (_vtApplied && GetConsoleMode(STD_OUTPUT_HANDLE, out var cur) && (cur & ENABLE_VIRTUAL_TERMINAL_PROCESSING) == 0)
+            SetConsoleMode(STD_OUTPUT_HANDLE, cur | ENABLE_VIRTUAL_TERMINAL_PROCESSING | ENABLE_PROCESSED_OUTPUT);
         var sb = new StringBuilder();
         sb.Append("\x1b[H"); // curseur en haut à gauche ; chaque ligne est complétée à la largeur, pas d'effacement => pas de scintillement
 

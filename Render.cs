@@ -8,17 +8,18 @@ public sealed partial class NuKeeperApp
     void Render(Terminal term)
     {
         var rows = new List<ScreenRow>();
+        if (_mode != AppMode.Loading) _view = _mode;
         if (_help)
             RenderHelp(rows);
         else
         {
             rows.Add(new ScreenRow(T(" NuKeeper ", ScreenColor.Cyan, bold: true), T(Breadcrumb(), ScreenColor.Default)) { Highlight = true });
-            switch (_mode)
+            // Pendant un chargement, on garde l'écran précédent : pas de saut visuel.
+            switch (_view)
             {
                 case AppMode.Select: RenderSelect(rows, term); break;
                 case AppMode.Packages: RenderPackages(rows, term); break;
                 case AppMode.Detail: RenderDetail(rows, term); break;
-                default: AddRow(rows, T(_loading is null ? "…" : "⏳ " + _loadMsg, ScreenColor.Yellow, bold: true)); break;
             }
         }
         int bottom = Math.Max(0, term.Height - 2);
@@ -30,6 +31,11 @@ public sealed partial class NuKeeperApp
             AddRow(rows, T(_confirmText, ScreenColor.Yellow, bold: true));
             AddRow(rows, Key("o/Entrée"), T("confirmer   ", ScreenColor.Dim), Key("autre touche"), T("annuler", ScreenColor.Dim));
         }
+        else if (_mode == AppMode.Loading)
+        {
+            AddRow(rows, T(" ● " + _loadMsg, ScreenColor.Yellow, bold: true));
+            AddRow(rows, Key("Ctrl+C") , T("quitter", ScreenColor.Dim));
+        }
         else
         {
             AddRow(rows, T(_status.Length > 0 ? _status : SelectedInfo(), _status.Length == 0 && SelectedInfo().Length > 0 ? ScreenColor.Red : _statusOk ? ScreenColor.Green : ScreenColor.Red));
@@ -38,7 +44,7 @@ public sealed partial class NuKeeperApp
         term.Render(rows);
     }
 
-    string Breadcrumb() => _mode switch
+    string Breadcrumb() => _view switch
     {
         AppMode.Select => "› Choix du projet",
         AppMode.Packages => "› " + Path.GetFileName(_data?.ProjectFile ?? ""),
@@ -89,26 +95,34 @@ public sealed partial class NuKeeperApp
 
     void RenderSelect(List<ScreenRow> rows, Terminal term)
     {
-        AddRow(rows, T(" Choisissez le projet à gérer — dossier : " + _root, ScreenColor.Dim));
+        AddRow(rows, T($" {_projects.Count} projet(s) sous ", ScreenColor.Dim), T(Ellipsis(_root, Math.Max(10, term.Width - 25)), ScreenColor.Default));
         if (_projects.Count == 0)
         {
             AddRow(rows, T(""));
-            AddRow(rows, T("Aucun fichier .csproj trouvé. F5 pour re-scanner.", ScreenColor.Yellow));
+            AddRow(rows, T(" Aucun fichier .csproj trouvé. F5 pour re-scanner.", ScreenColor.Yellow));
             return;
         }
-        AddRow(rows, T(""));
-        foreach ((string p, int i) in _projects.Select((p, i) => (p, i)).Skip(Window(_projSel, _projects.Count, term.Height - 6).First).Take(Math.Max(1, term.Height - 6)))
+        var names = _projects.Select(p => Path.GetFileNameWithoutExtension(p)).ToList();
+        int nw = Math.Clamp(names.Max(n => n.Length) + 4, 12, Math.Max(12, term.Width / 2));
+        AddRow(rows, T("   PROJET", ScreenColor.Dim, bold: true).Pad(nw + 3), T("DOSSIER", ScreenColor.Dim, bold: true));
+        int cap = Math.Max(1, term.Height - 6);
+        var (first, count) = Window(_projSel, _projects.Count, cap);
+        for (int i = first; i < first + count; i++)
         {
             bool sel = i == _projSel;
-            string rel;
-            try { rel = Path.GetRelativePath(_root, p); }
-            catch { rel = p; }
+            string dir = Path.GetDirectoryName(_projects[i]) ?? "";
+            string rel = dir;
+            try { rel = Path.GetRelativePath(_root, dir); } catch { }
+            if (rel == ".") rel = "(dossier racine)";
             rows.Add(new ScreenRow(
-                T(sel ? " ▶ " : "   ", sel ? ScreenColor.Yellow : ScreenColor.Default, bold: sel),
-                T(p == rel ? p : rel + "   (" + p + ")", ScreenColor.Default, bold: sel)) { Highlight = sel });
+                T(sel ? " ▶ " : "   ", ScreenColor.Yellow, bold: sel),
+                T(Fit(names[i], nw), sel ? ScreenColor.Yellow : ScreenColor.Default, bold: true),
+                T(Ellipsis(rel, Math.Max(10, term.Width - nw - 5)), ScreenColor.Dim)) { Highlight = sel });
         }
     }
 
+    // Garde la fin d'un chemin : le début est le moins informatif.
+    static string Ellipsis(string s, int max) => s.Length <= max ? s : "…" + s[^(max - 1)..];
     // ---------- Liste des paquets ----------
 
     const int C_ID = 28, C_REQ = 12, C_RES = 13, C_LATEST = 14;
