@@ -1,4 +1,4 @@
-namespace NuKeeper.Tui;
+namespace Packwise.Tui;
 
 using System.Runtime.InteropServices;
 using System.Text;

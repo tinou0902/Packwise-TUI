@@ -1,4 +1,4 @@
-# NuKeeper
+# Packwise
 
 Petite TUI console pour gérer les dépendances NuGet d'un projet .NET : versions déclarées et résolues,
 dernière version disponible, paquets directs et transitifs, vulnérabilités, mise à jour et suppression.
