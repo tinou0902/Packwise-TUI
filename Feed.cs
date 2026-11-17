@@ -1,4 +1,4 @@
-namespace NuKeeper;
+namespace Packwise;
 
 using System.Text.Json;
 

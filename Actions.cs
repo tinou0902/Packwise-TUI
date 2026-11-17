@@ -1,7 +1,7 @@
-namespace NuKeeper;
+namespace Packwise;
 
 /// <summary>Actions longues : chargement du projet, mise à jour, suppression, détail.</summary>
-public sealed partial class NuKeeperApp
+public sealed partial class PackwiseApp
 {
     // ---------- Chargement ----------
 

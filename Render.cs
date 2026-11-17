@@ -1,9 +1,9 @@
-using NuKeeper.Tui;
+using Packwise.Tui;
 
-namespace NuKeeper;
+namespace Packwise;
 
 /// <summary>Le dessin : chaque mode produit des lignes, le pied de page est commun.</summary>
-public sealed partial class NuKeeperApp
+public sealed partial class PackwiseApp
 {
     void Render(Terminal term)
     {
@@ -13,7 +13,7 @@ public sealed partial class NuKeeperApp
             RenderHelp(rows);
         else
         {
-            rows.Add(new ScreenRow(T(" NuKeeper ", ScreenColor.Cyan, bold: true), T(Breadcrumb(), ScreenColor.Default)) { Highlight = true });
+            rows.Add(new ScreenRow(T(" Packwise ", ScreenColor.Cyan, bold: true), T(Breadcrumb(), ScreenColor.Default)) { Highlight = true });
             // Pendant un chargement, on garde l'écran précédent : pas de saut visuel.
             switch (_view)
             {

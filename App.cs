@@ -1,13 +1,13 @@
-using NuKeeper.Tui;
+using Packwise.Tui;
 
-namespace NuKeeper;
+namespace Packwise;
 
 public enum AppMode { Select, Packages, Detail, Loading }
 
 public enum PkgFilter { All, Outdated, Vulnerable }
 
 /// <summary>Machine à états de l'UI : sélection du projet → tableau → détail.</summary>
-public sealed partial class NuKeeperApp
+public sealed partial class PackwiseApp
 {
     readonly string _root;
 
@@ -61,7 +61,7 @@ public sealed partial class NuKeeperApp
         _confirmAction = action;
     }
 
-    public NuKeeperApp(string root) => _root = root;
+    public PackwiseApp(string root) => _root = root;
 
     public async Task RunAsync()
     {

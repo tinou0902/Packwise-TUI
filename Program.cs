@@ -1,5 +1,5 @@
-// NuKeeper — petite TUI de gestion des dépendances NuGet (zéro paquet NuGet).
-// Usage: NuKeeper [dossier]   — par défaut, le dossier courant.
+// Packwise — petite TUI de gestion des dépendances NuGet (zéro paquet NuGet).
+// Usage: Packwise [dossier]   — par défaut, le dossier courant.
 
 string root = args.Length > 0 ? Path.GetFullPath(args[0]) : Directory.GetCurrentDirectory();
 if (!Directory.Exists(root))
@@ -10,7 +10,7 @@ if (!Directory.Exists(root))
 
 try
 {
-    await new NuKeeper.NuKeeperApp(root).RunAsync();
+    await new Packwise.PackwiseApp(root).RunAsync();
 }
 catch (System.Exception e)
 {

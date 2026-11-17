@@ -1,6 +1,6 @@
 using System.Diagnostics;
 
-namespace NuKeeper;
+namespace Packwise;
 
 /// <summary>
 /// Tout passe par le CLI `dotnet` : résolution, versions obsolètes,
