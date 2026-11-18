@@ -56,24 +56,25 @@ public sealed class NpmEcosystem : IEcosystem
         var ctx = ContextOf(projectFile);
         if (ctx.PackageManager != "npm") return await LoadReadOnly(projectFile, ctx);
 
-        // Code 1 si des paquets manquent ou sont invalides : l'arbre est quand même produit.
-        var ls = await Run(ctx.Cwd, ["ls", "--json", "--all", .. ctx.WorkspaceArgs]);
+        // Les trois commandes tournent ensemble : `npm outdated` et `npm audit` interrogent le registre, la partie lente.
+        // Code 1 si des paquets manquent ou sont invalides (`npm ls` : l'arbre est quand même produit), en retard
+        // (`npm outdated`) ou vulnérables (`npm audit`).
+        var res = await Task.WhenAll(
+            Run(ctx.Cwd, ["ls", "--json", "--all", .. ctx.WorkspaceArgs]),
+            Run(ctx.Cwd, ["outdated", "--json", .. ctx.WorkspaceArgs]),
+            Run(ctx.Cwd, ["audit", "--json", .. ctx.WorkspaceArgs]));
+        var ls = res[0];
         if (!IsJson(ls.Stdout))
         {
             ls.EnsureSuccess();
             throw new Exception("Sortie de npm ls inattendue.");
         }
         var data = NpmModel.ParseTree(ls.Stdout, ctx.Manifest, ctx.Member, this, projectFile);
-
-        // `npm outdated` sort en 1 quand un paquet est en retard, `npm audit` quand un paquet est vulnérable.
-        var res = await Task.WhenAll(
-            Run(ctx.Cwd, ["outdated", "--json", .. ctx.WorkspaceArgs]),
-            Run(ctx.Cwd, ["audit", "--json", .. ctx.WorkspaceArgs]));
         var warnings = new List<string>();
         try
         {
-            if (res[0].ExitCode > 1) throw new Exception();
-            NpmModel.ApplyOutdated(data, res[0].Stdout, ctx.Member ?? ctx.Manifest.Name);
+            if (res[1].ExitCode > 1) throw new Exception();
+            NpmModel.ApplyOutdated(data, res[1].Stdout, ctx.Member ?? ctx.Manifest.Name);
         }
         catch
         {
@@ -81,8 +82,8 @@ public sealed class NpmEcosystem : IEcosystem
         }
         try
         {
-            if (res[1].ExitCode > 1) throw new Exception();
-            NpmModel.ApplyAudit(data, res[1].Stdout);
+            if (res[2].ExitCode > 1) throw new Exception();
+            NpmModel.ApplyAudit(data, res[2].Stdout);
         }
         catch
         {
