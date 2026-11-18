@@ -52,10 +52,12 @@ public sealed partial class PackwiseApp
     string Breadcrumb() => _view switch
     {
         AppMode.Select => "› Choix du projet",
-        AppMode.Packages => "› " + Path.GetFileName(_data?.ProjectFile ?? ""),
-        AppMode.Detail => "› " + Path.GetFileName(_data?.ProjectFile ?? "") + " › " + _detail?.Id,
-        _ => _data is null ? "" : "› " + Path.GetFileName(_data.ProjectFile),
+        AppMode.Packages => "› " + ProjectTitle(),
+        AppMode.Detail => "› " + ProjectTitle() + " › " + _detail?.Id,
+        _ => _data is null ? "" : "› " + ProjectTitle(),
     };
+
+    string ProjectTitle() => _data is null ? "" : $"{_data.Ecosystem.ProjectName(_data.ProjectFile)} ({_data.Ecosystem.Label})";
 
     string SelectedInfo()
     {
@@ -89,9 +91,11 @@ public sealed partial class PackwiseApp
             "               1 : tous   2 : obsolètes   3 : vulnérables   t : filtre suivant   F5 : recharger   q : retour",
             "Détail         ↑↓ : choisir une version   Entrée/a : installer cette version (confirmation demandée)",
             "",
-            "Colonne TYPE   direct = référencé dans le csproj   transitif = tiré par une autre dépendance",
+            "Projets        .csproj (NuGet, via dotnet) et package.json (npm ; pnpm/Yarn en lecture seule)",
+            "Colonne TYPE   direct = déclaré dans le projet   dev/optional/peer = dépendance npm de ce type",
+            "               transitif = tiré par une autre dépendance",
             "État           ⚠ N vuln. = vulnérable (détails en bas)   obsolete = plus récente dispo   à jour",
-            "Versions       ⚠ vulnérable = advisory connu : à éviter   * = version installée",
+            "Versions       ⚠ vulnérable / dépréciée = à éviter   * = version installée",
             "",
             "Appuyez sur une touche pour fermer.",
         ];
@@ -109,26 +113,28 @@ public sealed partial class PackwiseApp
         if (list.Count == 0)
         {
             AddRow(rows, T(""));
-            AddRow(rows, T(_projects.Count == 0 ? " Aucun fichier .csproj trouvé. F5 pour re-scanner." : " Aucun projet ne correspond à la recherche (Échap pour effacer).", ScreenColor.Yellow));
+            AddRow(rows, T(_projects.Count == 0 ? " Aucun projet (.csproj, package.json) trouvé. F5 pour re-scanner." : " Aucun projet ne correspond à la recherche (Échap pour effacer).", ScreenColor.Yellow));
             return;
         }
-        var names = list.Select(p => Path.GetFileNameWithoutExtension(p)).ToList();
+        var names = list.Select(p => p.Name).ToList();
         int nw = Math.Clamp(names.Max(n => n.Length) + 4, 12, Math.Max(12, term.Width / 2));
-        AddRow(rows, T("   PROJET", ScreenColor.Dim, bold: true).Pad(nw + 3), T("DOSSIER", ScreenColor.Dim, bold: true));
+        const int ew = 8;
+        AddRow(rows, T("   PROJET", ScreenColor.Dim, bold: true).Pad(nw + 3), T("TYPE", ScreenColor.Dim, bold: true).Pad(ew), T("DOSSIER", ScreenColor.Dim, bold: true));
         int cap = Math.Max(1, term.Height - 6);
         _projSel = Math.Clamp(_projSel, 0, list.Count - 1);
         var (first, count) = Window(_projSel, list.Count, cap);
         for (int i = first; i < first + count; i++)
         {
             bool sel = i == _projSel;
-            string dir = Path.GetDirectoryName(list[i]) ?? "";
+            string dir = Path.GetDirectoryName(list[i].File) ?? "";
             string rel = dir;
             try { rel = Path.GetRelativePath(_root, dir); } catch { }
             if (rel == ".") rel = "(dossier racine)";
             rows.Add(new ScreenRow(
                 T(sel ? " ▶ " : "   ", ScreenColor.Yellow, bold: sel),
                 T(Fit(names[i], nw), sel ? ScreenColor.Yellow : ScreenColor.Default, bold: true),
-                T(Ellipsis(rel, Math.Max(10, term.Width - nw - 5)), ScreenColor.Dim)) { Highlight = sel });
+                T(list[i].Ecosystem.Label, ScreenColor.Cyan).Pad(ew),
+                T(Ellipsis(rel, Math.Max(10, term.Width - nw - ew - 5)), ScreenColor.Dim)) { Highlight = sel });
         }
     }
 
@@ -152,7 +158,8 @@ public sealed partial class PackwiseApp
             _ => (ScreenColor.Default, "tous"),
         };
         AddRow(rows,
-            T(Path.GetFileName(_data.ProjectFile), bold: true),
+            T(ProjectTitle(), bold: true),
+            T(_data.ReadOnly is null ? "" : $"   [lecture seule — {_data.ReadOnly}]", ScreenColor.Yellow, bold: true),
             T($"   {all.Count} paquets — {outdated} obsolètes, {vuln} vulnérables", ScreenColor.Dim),
             T($"   filtre: {filter} ({vis.Count})", fc),
             T(_search.Length > 0 ? $"   recherche : {_search}" : "", ScreenColor.Yellow, bold: true));
@@ -183,7 +190,7 @@ public sealed partial class PackwiseApp
                 T(p.Requested, ScreenColor.Dim).Pad(C_REQ),
                 T(p.Resolved, ScreenColor.Default).Pad(C_RES),
                 T(arrow + latest, cLatest).Pad(C_LATEST),
-                T(p.IsDirect ? "direct" : "transitif", p.IsDirect ? ScreenColor.Green : ScreenColor.Yellow).Pad(11),
+                T(p.IsDirect ? p.Kind ?? "direct" : "transitif", p.IsDirect ? ScreenColor.Green : ScreenColor.Yellow).Pad(11),
                 T(state.Item2, state.Item1, p.IsVulnerable)) { Highlight = sel });
         }
         if (vis.Count == 0)
@@ -209,7 +216,7 @@ public sealed partial class PackwiseApp
         if (pkg is null) return;
         AddRow(rows,
             T(pkg.Id + " " + pkg.Resolved, ScreenColor.Cyan, bold: true),
-            T(pkg.IsDirect ? "   [DIRECT — référencé dans le projet]" : "   [TRANSITIF — tiré par une autre dépendance]",
+            T(pkg.IsDirect ? $"   [{(pkg.Kind ?? "direct").ToUpperInvariant()} — {_data?.Ecosystem.DirectHint}]" : "   [TRANSITIF — tiré par une autre dépendance]",
                 pkg.IsDirect ? ScreenColor.Green : ScreenColor.Yellow, bold: true));
         if (pkg.Vulns.Count > 0)
         {
@@ -233,8 +240,8 @@ public sealed partial class PackwiseApp
             bool cur = v.Equals(pkg.Resolved, StringComparison.OrdinalIgnoreCase);
             ScreenColor c = sel ? ScreenColor.Yellow : cur ? ScreenColor.Green : ScreenColor.Dim;
             string mark = "";
-            if (_verVulns.TryGetValue(v, out var vr))
-                mark = $"  ⚠ vulnérable ({string.Join(", ", vr.Select(x => NuGetFeed.SeverityName(x.Severity)).Distinct())})";
+            if (_verWarnings.TryGetValue(v, out var w))
+                mark = "  ⚠ " + w;
             rows.Add(new ScreenRow(
                 T((sel ? "▶ " : "  ") + (cur ? "*" : " ") + v, c, bold: sel || cur),
                 T(mark, ScreenColor.Red, bold: sel)) { Highlight = sel });

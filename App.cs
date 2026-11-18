@@ -12,7 +12,7 @@ public sealed partial class PackwiseApp
     readonly string _root;
 
     AppMode _mode = AppMode.Select;
-    List<string> _projects = [];
+    List<ProjectRef> _projects = [];
     int _projSel;
 
     ProjectData? _data;
@@ -21,7 +21,7 @@ public sealed partial class PackwiseApp
 
     Package? _detail;
     List<string> _versions = [];
-    Dictionary<string, List<NuGetFeed.VulnRange>> _verVulns = new(StringComparer.OrdinalIgnoreCase);
+    Dictionary<string, string> _verWarnings = new(StringComparer.OrdinalIgnoreCase);
     int _verSel;
     string _detailInfo = "";
 
@@ -35,9 +35,9 @@ public sealed partial class PackwiseApp
     bool _searching;
     string _search = "";
 
-    List<string> ProjList() => _search.Length == 0
+    List<ProjectRef> ProjList() => _search.Length == 0
         ? _projects
-        : _projects.Where(p => Path.GetRelativePath(_root, p).Contains(_search, StringComparison.OrdinalIgnoreCase)).ToList();
+        : _projects.Where(p => Path.GetRelativePath(_root, p.File).Contains(_search, StringComparison.OrdinalIgnoreCase)).ToList();
 
     // Saisie de la recherche ; Entrée valide, Échap efface.
     void HandleSearchKey(ConsoleKeyInfo key)
@@ -65,7 +65,7 @@ public sealed partial class PackwiseApp
 
     public async Task RunAsync()
     {
-        _projects = DotNetCli.FindProjects(_root);
+        _projects = Discovery.FindProjects(_root);
         using var term = new Terminal();
         while (true)
         {
@@ -167,13 +167,13 @@ public sealed partial class PackwiseApp
                 if (_projSel < n - 1) _projSel++;
                 break;
             case ConsoleKey.F5:
-                _projects = DotNetCli.FindProjects(_root);
+                _projects = Discovery.FindProjects(_root);
                 _projSel = Math.Min(_projSel, Math.Max(0, _projects.Count - 1));
                 break;
             case ConsoleKey.Enter when n > 0:
                 _mode = AppMode.Loading;
                 _search = "";
-                _loadMsg = $"analyse de {Path.GetFileName(list[_projSel])}…";
+                _loadMsg = $"analyse de {list[_projSel].Name} ({list[_projSel].Ecosystem.Label})…";
                 _loading = LoadProject(list[_projSel]);
                 break;
         }
@@ -195,6 +195,7 @@ public sealed partial class PackwiseApp
                     if (!dict.TryGetValue(p.Id, out var acc))
                         dict[p.Id] = acc = new Package { Id = p.Id };
                     acc.IsDirect |= p.IsDirect;
+                    acc.Kind ??= p.Kind;
                     if (p.Requested.Length > 0) acc.Requested = p.Requested;
                     if (p.Resolved.Length > 0 && (acc.Resolved.Length == 0 || acc.CompareWith(p.Resolved) < 0))
                         acc.Resolved = p.Resolved;
@@ -240,11 +241,11 @@ public sealed partial class PackwiseApp
                 _sel = Math.Max(0, n - 1);
                 break;
             case ConsoleKey.F5:
-                if (_data?.ProjectFile is not null)
+                if (_data is not null)
                 {
                     _mode = AppMode.Loading;
                     _loadMsg = "rechargement…";
-                    _loading = LoadProject(_data.ProjectFile);
+                    _loading = Reload(_data);
                 }
                 break;
         }
@@ -259,7 +260,7 @@ public sealed partial class PackwiseApp
             _searching = true;
             return false;
         }
-        if (n == 0) return false;
+        if (n == 0 || _data is not { } data) return false;
         _sel = Math.Min(_sel, n - 1);
         var pkg = vis[_sel];
         switch (key.KeyChar)
@@ -278,12 +279,12 @@ public sealed partial class PackwiseApp
                 break;
             case 'u':
                 string target = pkg.Latest.Length > 0 ? pkg.Latest : "la dernière version stable";
-                Ask($"Mettre à jour {pkg.Id} {pkg.Resolved} → {target} ?", $"mise à jour de {pkg.Id}…", () => UpdateToLatest(pkg));
+                Ask($"Mettre à jour {pkg.Id} {pkg.Resolved} → {target} ?", $"mise à jour de {pkg.Id}…", () => UpdateToLatest(data, pkg));
                 break;
             case 'x':
                 if (pkg.IsDirect)
                 {
-                    Ask($"Supprimer {pkg.Id} du projet ?", $"suppression de {pkg.Id}…", () => RemovePackage(pkg));
+                    Ask($"Supprimer {pkg.Id} du projet ?", $"suppression de {pkg.Id}…", () => RemovePackage(data, pkg));
                 }
                 else
                 {
@@ -333,14 +334,15 @@ public sealed partial class PackwiseApp
         {
             string ver = _versions[_verSel];
             var pkg = _detail!;
+            var data = _data!;
             if (ver.Equals(pkg.Resolved, StringComparison.OrdinalIgnoreCase))
             {
                 _status = $"{pkg.Id} est déjà en {ver}";
                 _statusOk = true;
                 return false;
             }
-            string warn = _verVulns.ContainsKey(ver) ? "  ⚠ VERSION VULNÉRABLE" : "";
-            Ask($"Passer {pkg.Id} {pkg.Resolved} → {ver} ?{warn}", $"mise à jour {pkg.Id} → {ver}…", () => UpdateToVersion(pkg, ver));
+            string warn = _verWarnings.TryGetValue(ver, out var w) ? $"  ⚠ VERSION {w.ToUpperInvariant()}" : "";
+            Ask($"Passer {pkg.Id} {pkg.Resolved} → {ver} ?{warn}", $"mise à jour {pkg.Id} → {ver}…", () => UpdateToVersion(data, pkg, ver));
             return false;
         }
         return false;
