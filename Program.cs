@@ -1,4 +1,4 @@
-// Packwise — petite TUI de gestion des dépendances NuGet (zéro paquet NuGet).
+// Packwise — petite TUI de gestion des dépendances NuGet et npm (zéro paquet NuGet).
 // Usage: Packwise [dossier]   — par défaut, le dossier courant.
 
 string root = args.Length > 0 ? Path.GetFullPath(args[0]) : Directory.GetCurrentDirectory();
