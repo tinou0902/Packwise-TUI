@@ -10,16 +10,29 @@ et résolues, dernière version disponible, paquets directs et transitifs, vuln�
 
 ## Prérequis
 
-- SDK .NET 10
+- SDK .NET 10 pour les projets NuGet (et pour lancer depuis les sources)
 - Node.js et npm pour les projets npm
 - Un terminal ANSI (Windows Terminal, PowerShell moderne, etc.)
 - Accès réseau pour les dernières versions, vulnérabilités et le détail (sans réseau, la liste reste affichée avec un avertissement)
 
+## Installer
+
+Chaque tag `vX.Y.Z` publie une [release GitLab](https://gitlab.hexxusdata.com/perso/packwise/tui/-/releases) avec un
+exécutable autonome (pas besoin du runtime .NET pour lancer la TUI) pour Linux (x64, arm64), Windows (x64) et
+macOS (x64, arm64). Décompresser l'archive et placer `Packwise` (`Packwise.exe`) dans le `PATH`.
+
+Sur macOS, le binaire n'est pas notarié : `xattr -d com.apple.quarantine Packwise` s'il est bloqué au premier lancement.
+
+Pour publier une version : mettre à jour `<Version>` dans `Packwise.csproj`, puis pousser le tag `vX.Y.Z`
+correspondant (le pipeline échoue si les deux diffèrent).
+
 ## Lancer
 
 ```
-dotnet run -- [dossier]
+Packwise [dossier]
 ```
+
+Ou depuis les sources : `dotnet run -- [dossier]`.
 
 Sans argument, le dossier courant est scanné (4 niveaux ; `bin`, `obj`, `node_modules`, dossiers cachés et dossier
 `packages` de l'ancien NuGet ignorés) à la recherche de `.csproj` et de `package.json`. La colonne `TYPE` du choix

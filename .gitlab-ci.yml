@@ -1,0 +1,103 @@
+image: mcr.microsoft.com/dotnet/sdk:10.0
+
+stages:
+  - build
+  - package
+  - release
+
+variables:
+  PACKAGE_REGISTRY_URL: ${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/packwise-tui
+  DOTNET_CLI_TELEMETRY_OPTOUT: "1"
+  DOTNET_NOLOGO: "1"
+
+build:
+  stage: build
+  script:
+    - dotnet build -c Release -warnaserror
+
+# Self-contained single-file binaries (no .NET runtime needed to start the TUI), one job per platform.
+# Runs on the default branch and on tags; merge requests only need the build.
+package:
+  stage: package
+  rules:
+    - if: $CI_COMMIT_TAG
+    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
+  needs: [build]
+  parallel:
+    matrix:
+      - RID: [linux-x64, linux-arm64, win-x64, osx-x64, osx-arm64]
+  script:
+    - VERSION=$(dotnet msbuild Packwise.csproj -getProperty:Version)
+    - |
+      if [ -n "$CI_COMMIT_TAG" ] && [ "v$VERSION" != "$CI_COMMIT_TAG" ]; then
+        echo "Tag $CI_COMMIT_TAG does not match Packwise.csproj version $VERSION" >&2
+        exit 1
+      fi
+    - >
+      dotnet publish Packwise.csproj -c Release -r "$RID" --self-contained
+      -p:PublishSingleFile=true -p:EnableCompressionInSingleFile=true -p:DebugType=none
+      -o "publish/$RID"
+    - mkdir -p dist
+    - |
+      if [ "${RID%%-*}" = win ]; then
+        apt-get update -qq && apt-get install -y -qq zip > /dev/null
+        (cd "publish/$RID" && zip -q "$CI_PROJECT_DIR/dist/packwise-$VERSION-$RID.zip" Packwise.exe)
+      else
+        tar -czf "dist/packwise-$VERSION-$RID.tar.gz" -C "publish/$RID" Packwise
+      fi
+  artifacts:
+    name: packwise-tui-$RID-$CI_COMMIT_SHORT_SHA
+    paths: [dist/]
+    expire_in: 90 days
+
+# Tag pipelines (vX.Y.Z): store the archives in the generic package registry (no expiry)
+# and create a GitLab release linking to them.
+publish:
+  stage: release
+  image: curlimages/curl:8.11.1
+  rules:
+    - if: $CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/
+  needs: [package]
+  script:
+    - VERSION=${CI_COMMIT_TAG#v}
+    - echo "VERSION=$VERSION" > version.env
+    - |
+      for f in dist/*; do
+        curl --fail-with-body --header "JOB-TOKEN: $CI_JOB_TOKEN" --upload-file "$f" \
+          "$PACKAGE_REGISTRY_URL/$VERSION/$(basename "$f")"
+      done
+  artifacts:
+    reports:
+      dotenv: version.env
+
+release:
+  stage: release
+  image: registry.gitlab.com/gitlab-org/cli:latest
+  rules:
+    - if: $CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/
+  needs: [publish]
+  script:
+    - echo "Creating release $CI_COMMIT_TAG"
+  release:
+    tag_name: $CI_COMMIT_TAG
+    name: Packwise TUI $CI_COMMIT_TAG
+    description: |
+      Packwise TUI $CI_COMMIT_TAG — self-contained single-file binaries (no .NET runtime needed to start).
+      The .NET SDK is still required to manage NuGet projects, Node.js and npm for npm projects.
+    assets:
+      links:
+        - name: packwise-${VERSION}-linux-x64.tar.gz
+          url: ${PACKAGE_REGISTRY_URL}/${VERSION}/packwise-${VERSION}-linux-x64.tar.gz
+          link_type: package
+        - name: packwise-${VERSION}-linux-arm64.tar.gz
+          url: ${PACKAGE_REGISTRY_URL}/${VERSION}/packwise-${VERSION}-linux-arm64.tar.gz
+          link_type: package
+        - name: packwise-${VERSION}-win-x64.zip
+          url: ${PACKAGE_REGISTRY_URL}/${VERSION}/packwise-${VERSION}-win-x64.zip
+          link_type: package
+        - name: packwise-${VERSION}-osx-x64.tar.gz
+          url: ${PACKAGE_REGISTRY_URL}/${VERSION}/packwise-${VERSION}-osx-x64.tar.gz
+          link_type: package
+        - name: packwise-${VERSION}-osx-arm64.tar.gz
+          url: ${PACKAGE_REGISTRY_URL}/${VERSION}/packwise-${VERSION}-osx-arm64.tar.gz
+          link_type: package
