@@ -36,11 +36,12 @@ Packwise [dossier]
 
 Ou depuis les sources : `dotnet run -- [dossier]`.
 
-Sans argument, le dossier courant est scanné (4 niveaux ; `bin`, `obj`, `node_modules`, dossiers cachés et dossier
-`packages` de l'ancien NuGet ignorés) à la recherche de `.csproj` et de `package.json`. La colonne `TYPE` du choix
+Sans argument, le dossier courant est scanné (4 niveaux ; `bin`, `obj`, `node_modules`, dossiers cachés, dossier
+`packages` de l'ancien NuGet et fichiers ignorés par git, comme les copies des sorties de build, écartés) à la recherche de `.csproj` et de `package.json`. La colonne `TYPE` du choix
 du projet indique l'écosystème.
 
-- **NuGet** : un projet jamais restauré est restauré automatiquement.
+- **NuGet** : le projet est restauré une fois à l'ouverture, puis ses trois `dotnet list package` (installés,
+  obsolètes, vulnérables) tournent en parallèle sans restauration.
 - **npm** : chaque `package.json` est un projet, racine de workspaces comme membre ; un membre est piloté depuis sa
   racine avec `--workspace`. Les projets **pnpm** et **Yarn** (champ `packageManager` ou fichier de verrouillage) sont
   en **lecture seule** : paquets déclarés, versions installées (`node_modules`) et dernières versions, sans transitifs

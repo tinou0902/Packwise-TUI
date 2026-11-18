@@ -71,11 +71,16 @@ public static class Discovery
         catch { return false; }
     }
 
-    /// <summary>Projets de tous les écosystèmes sous un dossier (4 niveaux, dossiers cachés exclus), triés par chemin.</summary>
+    /// <summary>
+    /// Projets de tous les écosystèmes sous un dossier (4 niveaux, dossiers cachés et fichiers ignorés par git exclus),
+    /// triés par chemin.
+    /// </summary>
     public static List<ProjectRef> FindProjects(string startDir)
     {
-        var results = new List<ProjectRef>();
-        Search(startDir, results, depth: 4);
+        var found = new List<ProjectRef>();
+        Search(startDir, found, depth: 4);
+        var kept = GitIgnored.Without(found.Select(p => p.File).ToList()).ToHashSet(StringComparer.Ordinal);
+        var results = found.Where(p => kept.Contains(p.File)).ToList();
         results.Sort((a, b) => StringComparer.OrdinalIgnoreCase.Compare(a.File, b.File));
         return results;
     }

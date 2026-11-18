@@ -12,21 +12,21 @@ public sealed class NuGetEcosystem : IEcosystem
 
     public async Task<LoadResult> LoadAsync(string projectFile)
     {
-        var list = await DotNetCli.ListAsync(projectFile);
+        // Une restauration, puis les trois listes en parallèle sans la leur. Restauration en échec (hors ligne) :
+        // un fichier d'assets déjà présent suffit aux listes.
+        var restore = await DotNetCli.RestoreAsync(projectFile);
+        var res = await Task.WhenAll(DotNetCli.ListInstalledAsync(projectFile), DotNetCli.ListOutdatedAsync(projectFile),
+            DotNetCli.ListVulnerableAsync(projectFile));
+        var list = res[0];
         if (!list.Success && (list.Stdout + list.Stderr).Contains("assets file", StringComparison.OrdinalIgnoreCase))
-        {
-            // Projet jamais restauré : `dotnet list package` n'a rien à lire.
-            await DotNetCli.RestoreAsync(projectFile);
-            list = await DotNetCli.ListAsync(projectFile);
-        }
+            restore.EnsureSuccess(); // projet jamais restauré : l'erreur de la restauration est la vraie cause
         var data = ListJson.Parse(list.EnsureSuccess().Stdout, this, projectFile);
 
-        var res = await Task.WhenAll(DotNetCli.ListOutdatedAsync(projectFile), DotNetCli.ListVulnerableAsync(projectFile));
         var warnings = new List<string>();
         // Hors-ligne ou flux injoignable : on garde la liste, sans dernières versions / vulnérabilités.
-        if (res[0].Success && res[0].Stdout.Length > 0) ListJson.ApplyOutdated(data, res[0].Stdout);
+        if (res[1].Success && res[1].Stdout.Length > 0) ListJson.ApplyOutdated(data, res[1].Stdout);
         else warnings.Add("versions récentes indisponibles");
-        if (res[1].Success && res[1].Stdout.Length > 0) ListJson.ApplyVulnerable(data, res[1].Stdout);
+        if (res[2].Success && res[2].Stdout.Length > 0) ListJson.ApplyVulnerable(data, res[2].Stdout);
         else warnings.Add("vulnérabilités indisponibles");
         return new LoadResult(data, warnings);
     }

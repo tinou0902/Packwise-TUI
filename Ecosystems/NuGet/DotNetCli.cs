@@ -15,14 +15,19 @@ public static class DotNetCli
 
     static Task<Proc.Result> RunAsync(params string[] args) => Proc.RunAsync("dotnet", args, env: Env);
 
-    public static Task<Proc.Result> ListAsync(string projectFile) =>
-        RunAsync("list", projectFile, "package", "--include-transitive", "--format", "json");
+    // `dotnet list package` sans sa restauration implicite : le projet est restauré une fois avant les trois appels,
+    // qui ne relancent pas chacun la même restauration en parallèle.
+    static Task<Proc.Result> ListAsync(string projectFile, params string[] extra) =>
+        RunAsync(["list", projectFile, "package", .. extra, "--no-restore", "--format", "json"]);
+
+    public static Task<Proc.Result> ListInstalledAsync(string projectFile) =>
+        ListAsync(projectFile, "--include-transitive");
 
     public static Task<Proc.Result> ListOutdatedAsync(string projectFile) =>
-        RunAsync("list", projectFile, "package", "--outdated", "--format", "json");
+        ListAsync(projectFile, "--outdated");
 
     public static Task<Proc.Result> ListVulnerableAsync(string projectFile) =>
-        RunAsync("list", projectFile, "package", "--vulnerable", "--include-transitive", "--format", "json");
+        ListAsync(projectFile, "--vulnerable", "--include-transitive");
 
     public static Task<Proc.Result> RestoreAsync(string projectFile) =>
         RunAsync("restore", projectFile);
