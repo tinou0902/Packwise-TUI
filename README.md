@@ -1,3 +1,5 @@
+<p align="center"><img src="media/icon.png" alt="Packwise" width="128"></p>
+
 # Packwise
 
 Petite TUI console pour gérer les dépendances **NuGet** (.NET) et **npm** (Node.js) d'un projet : versions déclarées
