@@ -1,86 +1,93 @@
 <p align="center"><img src="media/icon.png" alt="Packwise" width="128"></p>
 
-# Packwise
+# Packwise TUI
 
-Petite TUI console pour gérer les dépendances **NuGet** (.NET) et **npm** (Node.js) d'un projet : versions déclarées
-et résolues, dernière version disponible, paquets directs et transitifs, vulnérabilités, mise à jour et suppression.
+A small console UI to manage the **NuGet** (.NET) and **npm** (Node.js) dependencies of a project: declared and
+resolved versions, latest available version, direct and transitive packages, vulnerabilities, update and removal.
 
-- .NET 10, **aucun paquet NuGet** (System.Text.Json uniquement), interface ANSI écrite à la main
-- Un fournisseur par écosystème derrière une interface commune (`IEcosystem`), comme l'extension VS Code
-- NuGet : résolution, obsolescence et vulnérabilités via `dotnet list package` ; versions et métadonnées via l'API NuGet v3 (nuget.org)
-- npm : arbre, obsolescence et vulnérabilités via `npm ls`, `npm outdated` et `npm audit` ; versions et métadonnées via le registre npm (registres de `.npmrc` respectés)
+- .NET 10, **no NuGet package** (System.Text.Json only), hand-written ANSI interface
+- One provider per ecosystem behind a common interface (`IEcosystem`), like the
+  [VS Code extension](https://github.com/tinou0902/packwise)
+- NuGet: resolution, outdated and vulnerable packages through `dotnet list package`; versions and metadata through the
+  NuGet v3 API (nuget.org)
+- npm: tree, outdated and vulnerable packages through `npm ls`, `npm outdated` and `npm audit`; versions and metadata
+  through the npm registry (registries from `.npmrc` honoured)
 
-## Prérequis
+## Requirements
 
-- SDK .NET 10 pour les projets NuGet (et pour lancer depuis les sources)
-- Node.js et npm pour les projets npm
-- Un terminal ANSI (Windows Terminal, PowerShell moderne, etc.)
-- Accès réseau pour les dernières versions, vulnérabilités et le détail (sans réseau, la liste reste affichée avec un avertissement)
+- .NET 10 SDK for NuGet projects (and to run from source)
+- Node.js and npm for npm projects
+- An ANSI terminal (Windows Terminal, modern PowerShell, etc.)
+- Network access for latest versions, vulnerabilities and details (offline, the list is still shown with a warning)
 
-## Installer
+## Install
 
-Chaque tag `vX.Y.Z` publie une [release GitLab](https://gitlab.hexxusdata.com/perso/packwise/tui/-/releases) avec un
-exécutable autonome (pas besoin du runtime .NET pour lancer la TUI) pour Linux (x64, arm64), Windows (x64) et
-macOS (x64, arm64). Décompresser l'archive et placer `Packwise` (`Packwise.exe`) dans le `PATH`.
+Each `vX.Y.Z` tag publishes a [release](https://github.com/tinou0902/packwise-tui/releases) with a self-contained
+executable (no .NET runtime needed to start the TUI) for Linux (x64, arm64), Windows (x64) and macOS (x64, arm64).
+Extract the archive and put `Packwise` (`Packwise.exe`) in your `PATH`.
 
-Sur macOS, le binaire n'est pas notarié : `xattr -d com.apple.quarantine Packwise` s'il est bloqué au premier lancement.
+On macOS the binary is not notarized: run `xattr -d com.apple.quarantine Packwise` if it is blocked on first launch.
 
-Pour publier une version : mettre à jour `<Version>` dans `Packwise.csproj`, puis pousser le tag `vX.Y.Z`
-correspondant (le pipeline échoue si les deux diffèrent).
+To release a version: update `<Version>` in `Packwise.csproj`, then push the matching `vX.Y.Z` tag (the pipeline fails
+if they differ).
 
-## Lancer
+## Run
 
 ```
-Packwise [dossier]
+Packwise [folder]
 ```
 
-Ou depuis les sources : `dotnet run -- [dossier]`.
+Or from source: `dotnet run -- [folder]`.
 
-Sans argument, le dossier courant est scanné (4 niveaux ; `bin`, `obj`, `node_modules`, dossiers cachés, dossier
-`packages` de l'ancien NuGet et fichiers ignorés par git, comme les copies des sorties de build, écartés) à la recherche de `.csproj` et de `package.json`. La colonne `TYPE` du choix
-du projet indique l'écosystème.
+Without an argument, the current folder is scanned (4 levels deep; `bin`, `obj`, `node_modules`, hidden folders, the
+legacy NuGet `packages` folder and git-ignored files, such as copies of build outputs, are skipped) for `.csproj` and
+`package.json` files. The `TYPE` column of the project picker shows the ecosystem.
 
-- **NuGet** : le projet est restauré une fois à l'ouverture, puis ses trois `dotnet list package` (installés,
-  obsolètes, vulnérables) tournent en parallèle sans restauration.
-- **npm** : chaque `package.json` est un projet, racine de workspaces comme membre ; un membre est piloté depuis sa
-  racine avec `--workspace`. Les projets **pnpm** et **Yarn** (champ `packageManager` ou fichier de verrouillage) sont
-  en **lecture seule** : paquets déclarés, versions installées (`node_modules`) et dernières versions, sans transitifs
-  ni vulnérabilités.
+- **NuGet**: the project is restored once when opened, then its three `dotnet list package` runs (installed, outdated,
+  vulnerable) run in parallel without restoring.
+- **npm**: each `package.json` is a project, workspace root or member alike; a member is driven from its root with
+  `--workspace`. **pnpm** and **Yarn** projects (`packageManager` field or lock file) are **read-only**: declared
+  packages, installed versions (`node_modules`) and latest versions, without transitive packages or vulnerabilities.
 
-## Écrans et raccourcis
+## Screens and shortcuts
 
-**Sélection du projet** : `↑` `↓` naviguer, `Entrée` ouvrir, `F5` re-scanner, `q` ou `Échap` quitter.
+**Project picker**: `↑` `↓` navigate, `Enter` open, `F5` rescan, `q` or `Esc` quit.
 
-**Liste des paquets** (colonnes : paquet, requis, résolu, dernière, type, état)
+**Package list** (columns: package, requested, resolved, latest, type, status)
 
-| Touche | Action |
+| Key | Action |
 |---|---|
-| `↑` `↓` `PgUp` `PgDn` `Home` `End` | naviguer |
-| `/` | rechercher (projets ou paquets) ; `Entrée` valide, `Échap` efface |
-| `?` / `F1` | aide |
-| `Entrée` / `d` | détail du paquet |
-| `u` | mettre à jour à la dernière version stable (confirmation) |
-| `x` | supprimer, paquets directs uniquement (confirmation) |
-| `1` `2` `3` / `t` | filtre : tous / obsolètes / vulnérables |
-| `F5` | recharger |
-| `q` / `Échap` | retour au choix du projet |
+| `↑` `↓` `PgUp` `PgDn` `Home` `End` | navigate |
+| `/` | search (projects or packages); `Enter` confirms, `Esc` clears |
+| `?` / `F1` | help |
+| `Enter` / `d` | package details |
+| `u` | update to the latest stable version (with confirmation) |
+| `x` | remove, direct packages only (with confirmation) |
+| `1` `2` `3` / `t` | filter: all / outdated / vulnerable |
+| `F5` | reload |
+| `q` / `Esc` | back to the project picker |
 
-La colonne `TYPE` indique `direct` (déclaré dans le projet), `dev` / `optional` / `peer` (dépendance npm de ce type)
-ou `transitif` (tiré par une autre dépendance).
+The `TYPE` column shows `direct` (declared in the project), `dev` / `optional` / `peer` (npm dependency of that kind)
+or `transitif` (transitive: pulled in by another dependency).
 
-**Détail** : description, auteurs, licence, dépendances, vulnérabilités et toutes les versions publiées. Les versions
-à éviter sont marquées : `⚠ vulnérable (sévérité)` pour un advisory nuget.org, `⚠ dépréciée` pour une version npm
-dépréciée.
-`↑` `↓` choisir une version, `Entrée` ou `a` pour y passer, `q` / `Échap` pour revenir.
+**Details**: description, authors, license, dependencies, vulnerabilities and every published version. Versions to
+avoid are flagged: `⚠ vulnérable (sévérité)` for a nuget.org advisory, `⚠ dépréciée` for a deprecated npm version.
+`↑` `↓` pick a version, `Enter` or `a` to switch to it, `q` / `Esc` to go back.
 
-`Ctrl+C` quitte à tout moment.
+`Ctrl+C` quits at any time.
 
-## Limites
+The interface itself is in French; the labels above are its own.
 
-- Mettre à jour un paquet transitif l'ajoute comme référence directe (csproj, `dependencies` du package.json).
-- NuGet : la mise à jour échoue avec la gestion centralisée des versions (`Directory.Packages.props`) ; seule la source
-  nuget.org est interrogée pour le détail (`dotnet list` respecte, lui, votre `NuGet.Config`).
-- npm : une mise à jour installe la version exacte et garde le préfixe de la plage (`^`, `~` ou version exacte) ; les
-  registres authentifiés ne sont pas gérés pour le détail ; pas de marquage des versions vulnérables dans le détail
-  (seules les vulnérabilités de la version installée, via `npm audit`).
-- Python (PyPI) n'est pas encore pris en charge par la TUI (il l'est par l'extension VS Code).
+## Limitations
+
+- Updating a transitive package adds it as a direct reference (csproj, `dependencies` of package.json).
+- NuGet: updating fails with central package management (`Directory.Packages.props`); only nuget.org is queried for
+  details (`dotnet list` itself honours your `NuGet.Config`).
+- npm: an update installs the exact version and keeps the range prefix (`^`, `~` or exact version); authenticated
+  registries are not supported for details; vulnerable versions are not flagged in the details (only the
+  vulnerabilities of the installed version, through `npm audit`).
+- Python (PyPI) is not supported by the TUI yet (it is by the VS Code extension).
+
+## License
+
+[MIT](LICENSE)
