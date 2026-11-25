@@ -101,3 +101,38 @@ release:
         - name: packwise-${VERSION}-osx-arm64.tar.gz
           url: ${PACKAGE_REGISTRY_URL}/${VERSION}/packwise-${VERSION}-osx-arm64.tar.gz
           link_type: package
+
+# Same release on the public GitHub mirror (the push mirror copies tags, not releases). Needs a GITHUB_TOKEN CI/CD
+# variable: fine-grained token on tinou0902/packwise-tui with "Contents: read and write".
+# Backfill: run a pipeline on master (UI or API) with GITHUB_RELEASE_TAG=vX.Y.Z (archives come from the package registry).
+github-release:
+  stage: release
+  image: node:24-alpine
+  rules:
+    - if: $GITHUB_TOKEN == null || $GITHUB_TOKEN == ""
+      when: never
+    - if: $CI_COMMIT_TAG =~ /^v\d+\.\d+\.\d+$/
+      variables: { RELEASE_TAG: $CI_COMMIT_TAG }
+    - if: $CI_PIPELINE_SOURCE =~ /^(web|api)$/ && $GITHUB_RELEASE_TAG =~ /^v\d+\.\d+\.\d+$/
+      variables: { RELEASE_TAG: $GITHUB_RELEASE_TAG }
+  # Optional: a backfill pipeline has no release job, and its package jobs build another version (the archives
+  # missing from dist/ are then fetched from the package registry).
+  needs:
+    - job: package
+      optional: true
+    - job: release
+      optional: true
+  script:
+    - VERSION=${RELEASE_TAG#v}
+    - mkdir -p dist
+    - FILES=""
+    - |
+      for RID in linux-x64 linux-arm64 win-x64 osx-x64 osx-arm64; do
+        case $RID in win-*) EXT=zip ;; *) EXT=tar.gz ;; esac
+        FILE="dist/packwise-$VERSION-$RID.$EXT"
+        if [ ! -f "$FILE" ]; then
+          wget -q --header "JOB-TOKEN: $CI_JOB_TOKEN" -O "$FILE" "$PACKAGE_REGISTRY_URL/$VERSION/$(basename "$FILE")"
+        fi
+        FILES="$FILES $FILE"
+      done
+    - node scripts/github-release.mjs "$RELEASE_TAG" $FILES
