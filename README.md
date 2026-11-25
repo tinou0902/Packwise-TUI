@@ -13,6 +13,12 @@ resolved versions, latest available version, direct and transitive packages, vul
 - npm: tree, outdated and vulnerable packages through `npm ls`, `npm outdated` and `npm audit`; versions and metadata
   through the npm registry (registries from `.npmrc` honoured)
 
+![NuGet packages of a project, with outdated and vulnerable versions flagged](media/screenshots/nuget-packages.png)
+
+![Package details: metadata, dependencies and every version, vulnerable ones flagged](media/screenshots/package-details.png)
+
+![npm packages of a project, direct, dev and transitive](media/screenshots/npm-packages.png)
+
 ## Requirements
 
 - .NET 10 SDK for NuGet projects (and to run from source)
